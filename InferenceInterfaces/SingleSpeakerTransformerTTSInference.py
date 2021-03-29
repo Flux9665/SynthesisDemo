@@ -2,8 +2,6 @@ import os
 from abc import ABC
 
 import numpy as np
-import sounddevice
-import soundfile
 import torch
 import torch.nn.functional as F
 
@@ -330,24 +328,3 @@ class SingleSpeakerTransformerTTSInference(torch.nn.Module):
         mel = self.phone2mel(phones).transpose(0, 1).detach()
         wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0).detach()
         return wave
-
-    def read_to_file(self, text_list, file_location):
-        """
-        :param text_list: A list of strings to be read
-        :param file_location: The path and name of the file it should be saved to
-        """
-        wav = None
-        silence = torch.zeros([8000])
-        for text in text_list:
-            if text.strip() != "":
-                print("Now synthesizing: {}".format(text))
-                if wav is None:
-                    wav = self(text).cpu()
-                else:
-                    wav = torch.cat((wav, silence), 0)
-                    wav = torch.cat((wav, self(text).cpu()), 0)
-        soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=16000)
-
-    def read_aloud(self, text):
-        wav = self(text).cpu().numpy()
-        sounddevice.play(wav, samplerate=16000)
