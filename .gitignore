@@ -1,0 +1,11 @@
+.idea
+*.pyc
+*.png
+*.pdf
+tensorboard_logs
+Corpora
+Models
+*_graph
+*.out
+*.wav
+notes.txt
