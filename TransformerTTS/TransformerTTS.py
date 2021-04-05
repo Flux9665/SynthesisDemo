@@ -568,7 +568,7 @@ def plot_attention(att, sentence=None, phones=None):
     if sentence is not None:
         plt.title(sentence)
     plt.tight_layout()
-    plt.show()
+
 
 
 def plot_attentions(atts):
@@ -587,7 +587,7 @@ def plot_attentions(atts):
         axes[index][1].xaxis.set_visible(False)
         axes[index][1].yaxis.set_visible(False)
     plt.subplots_adjust(left=0.02, bottom=0.02, right=.98, top=.98, wspace=0, hspace=0)
-    plt.show()
+
 
 
 def get_atts(model, sentence, lang, teacher_forcing, get_phones=False):

@@ -147,7 +147,7 @@ class AudioPreprocessor:
             lbd.specshow(clean_spec, sr=self.sr, cmap='GnBu', y_axis='mel', ax=ax[1], x_axis='time')
         ax[1].set(title='Cleaned Audio')
         ax[1].label_outer()
-        plt.show()
+
 
     def audio_to_wave_tensor(self, audio, normalize=True, mulaw=False):
         if mulaw:
