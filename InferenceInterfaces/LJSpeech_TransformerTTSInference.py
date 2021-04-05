@@ -2,6 +2,8 @@ import os
 from abc import ABC
 
 import numpy as np
+import sounddevice
+import soundfile
 import torch
 import torch.nn.functional as F
 
@@ -75,8 +77,7 @@ class Transformer(torch.nn.Module, ABC):
                  num_layers_applied_guided_attn: int = 2,
                  modules_applied_guided_attn=("encoder-decoder",),
                  guided_attn_loss_sigma: float = 0.4,  # standard deviation from diagonal that is allowed
-                 guided_attn_loss_lambda: float = 25.0,
-                 lang='en'):
+                 guided_attn_loss_lambda: float = 25.0):
         super().__init__()
         self.idim = idim
         self.odim = odim
@@ -168,12 +169,8 @@ class Transformer(torch.nn.Module, ABC):
         if self.use_guided_attn_loss:
             self.attn_criterion = GuidedMultiHeadAttentionLoss(sigma=guided_attn_loss_sigma,
                                                                alpha=guided_attn_loss_lambda)
-        if lang == "en":
-            self.load_state_dict(
-                torch.load(os.path.join("Models", "Use", "Transformer_English_Single.pt"), map_location='cpu')["model"])
-        elif lang == "de":
-            self.load_state_dict(
-                torch.load(os.path.join("Models", "Use", "Transformer_German_Single.pt"), map_location='cpu')["model"])
+        self.load_state_dict(
+            torch.load(os.path.join("Models", "TransformerTTS_LJSpeech", "best.pt"), map_location='cpu')["model"])
 
     def forward(self, text: torch.Tensor, spemb=None):
         self.eval()
@@ -241,9 +238,9 @@ class MelGANGenerator(torch.nn.Module):
                  kernel_size=7,
                  channels=512,
                  bias=True,
-                 upsample_scales=[8, 8, 2, 2],
+                 upsample_scales=[8, 4, 2, 2, 2],
                  stack_kernel_size=3,
-                 stacks=3,
+                 stacks=4,
                  nonlinear_activation="LeakyReLU",
                  nonlinear_activation_params={"negative_slope": 0.2},
                  pad="ReflectionPad1d",
@@ -285,7 +282,7 @@ class MelGANGenerator(torch.nn.Module):
         if use_weight_norm:
             self.apply_weight_norm()
         self.load_state_dict(
-            torch.load(os.path.join("Models", "Use", "MelGAN.pt"), map_location='cpu')["generator"])
+            torch.load(os.path.join("Models", "MelGAN_LJSpeech", "best.pt"), map_location='cpu')["generator"])
 
     def remove_weight_norm(self):
         def _remove_weight_norm(m):
@@ -308,23 +305,60 @@ class MelGANGenerator(torch.nn.Module):
         return self.melgan(melspec)
 
 
-class SingleSpeakerTransformerTTSInference(torch.nn.Module):
-    def __init__(self, device="cpu", lang="en", reduction_factor=1):
+class LJSpeech_TransformerTTSInference(torch.nn.Module):
+    def __init__(self, device="cpu"):
         super().__init__()
         self.device = device
-        self.text2phone = TextFrontend(language=lang,
+        self.text2phone = TextFrontend(language="en",
                                        use_panphon_vectors=False,
                                        use_word_boundaries=False,
                                        use_explicit_eos=False)
-        self.phone2mel = Transformer(idim=133, odim=80, spk_embed_dim=None, lang=lang,
-                                     reduction_factor=reduction_factor).to(torch.device(device))
+        self.phone2mel = Transformer(idim=133, odim=80, spk_embed_dim=None,
+                                     reduction_factor=1).to(torch.device(device))
         self.mel2wav = MelGANGenerator().to(torch.device(device))
         self.phone2mel.eval()
         self.mel2wav.eval()
         self.to(torch.device(device))
 
-    def forward(self, text):
-        phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
-        mel = self.phone2mel(phones).transpose(0, 1).detach()
-        wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0).detach()
+    def forward(self, text, view=False):
+        with torch.no_grad():
+            phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
+            mel = self.phone2mel(phones).transpose(0, 1)
+            wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
+        if view:
+            import matplotlib.pyplot as plt
+            import librosa.display as lbd
+            fig, ax = plt.subplots(nrows=2, ncols=1)
+            ax[0].plot(wave.cpu().numpy())
+            lbd.specshow(mel.cpu().numpy(), ax=ax[1], sr=16000, cmap='GnBu', y_axis='mel', x_axis='time',
+                         hop_length=256)
+            ax[0].set_title(self.text2phone.get_phone_string(text))
+            ax[0].yaxis.set_visible(False)
+            ax[1].yaxis.set_visible(False)
+            plt.subplots_adjust(left=0.05, bottom=0.1, right=0.95, top=.9, wspace=0.0, hspace=0.0)
+            plt.show()
+
         return wave
+
+    def read_to_file(self, text_list, file_location, silent=False):
+        """
+        :param silent: Whether to be verbose about the process
+        :param text_list: A list of strings to be read
+        :param file_location: The path and name of the file it should be saved to
+        """
+        wav = None
+        silence = torch.zeros([8000])
+        for text in text_list:
+            if text.strip() != "":
+                if not silent:
+                    print("Now synthesizing: {}".format(text))
+                if wav is None:
+                    wav = self(text).cpu()
+                else:
+                    wav = torch.cat((wav, silence), 0)
+                    wav = torch.cat((wav, self(text).cpu()), 0)
+        soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=16000)
+
+    def read_aloud(self, text, view=False):
+        wav = self(text, view).cpu().numpy()
+        sounddevice.play(wav, samplerate=16000)

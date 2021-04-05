@@ -8,7 +8,9 @@ MelGAN Modules.
 """
 
 import torch
+
 from MelGAN.MelGANDiscriminator import MelGANDiscriminator
+
 
 class MelGANMultiScaleDiscriminator(torch.nn.Module):
     """
@@ -18,7 +20,7 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
     def __init__(self,
                  in_channels=1,
                  out_channels=1,
-                 scales=3,
+                 scales=4,
                  downsample_pooling="AvgPool1d",
                  # follow the official implementation setting
                  downsample_pooling_params={"kernel_size": 4,
@@ -26,10 +28,10 @@ class MelGANMultiScaleDiscriminator(torch.nn.Module):
                                             "padding": 1,
                                             "count_include_pad": False},
                  kernel_sizes=[5, 3],
-                 channels=16,
+                 channels=64,
                  max_downsample_channels=1024,
                  bias=True,
-                 downsample_scales=[4, 4, 4, 4],
+                 downsample_scales=[4, 4, 4, 2, 2],
                  nonlinear_activation="LeakyReLU",
                  nonlinear_activation_params={"negative_slope": 0.2},
                  pad="ReflectionPad1d",

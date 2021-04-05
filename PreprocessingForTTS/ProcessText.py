@@ -11,7 +11,7 @@ from cleantext import clean
 class TextFrontend:
     def __init__(self,
                  language,
-                 use_panphon_vectors=True,
+                 use_panphon_vectors=False,
                  use_word_boundaries=False,
                  use_explicit_eos=False,
                  use_prosody=False,  # unfortunately the non segmental
@@ -19,8 +19,9 @@ class TextFrontend:
                  # phonemes hurts the performance of end-to-end models a
                  # lot, even though one might think enriching the input
                  # with such information would help such systems.
+                 use_lexical_stress=False,
                  path_to_panphon_table="PreprocessingForTTS/ipa_vector_lookup.csv",
-                 silent=False):
+                 silent=True):
         """
         Mostly preparing ID lookups
         """
@@ -28,6 +29,7 @@ class TextFrontend:
         self.use_word_boundaries = use_word_boundaries
         self.use_explicit_eos = use_explicit_eos
         self.use_prosody = use_prosody
+        self.use_stress = use_lexical_stress
 
         # list taken and modified from https://github.com/dmort27/panphon
         # see publication: https://www.aclweb.org/anthology/C16-1328/
@@ -94,14 +96,15 @@ class TextFrontend:
                                       preserve_punctuation=True,
                                       strip=True,
                                       punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                      with_stress=True).replace(";", ",").replace(":", ",").replace('"', ",").replace(
+                                      with_stress=self.use_stress).replace(";", ",").replace(":", ",").replace('"',
+                                                                                                               ",").replace(
             "--", ",").replace("-", ",").replace("\n", " ").replace("\t", " ").replace("¡", "!").replace(
-            "¿", "?").replace(",", "~")
+            "¿", "?").replace(",", "~").replace("~~", "~")
 
         if not self.use_prosody:
-            # retain , as heuristic pause marker, even though all other symbols are removed with this option.
-            # also retain . ? and ! since they can be indicators o the stop token
-            phones = phones.replace("ˈ", "").replace("ˌ", "").replace("ː", "").replace(
+            # retain ~ as heuristic pause marker, even though all other symbols are removed with this option.
+            # also retain . ? and ! since they can be indicators for the stop token
+            phones = phones.replace("ˌ", "").replace("ː", "").replace(
                 "ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
 
         if not self.use_word_boundaries:
@@ -141,11 +144,12 @@ class TextFrontend:
                                       preserve_punctuation=True,
                                       strip=True,
                                       punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                      with_stress=True).replace(";", ",").replace(":", ",").replace('"', ",").replace(
+                                      with_stress=self.use_stress).replace(";", ",").replace(":", ",").replace('"',
+                                                                                                               ",").replace(
             "--", ",").replace("-", ",").replace("\n", " ").replace("\t", " ").replace("¡", "!").replace(
             "¿", "?").replace(",", "~")
         if not self.use_prosody:
-            phones = phones.replace("ˈ", "").replace("ˌ", "").replace("ː", "").replace(
+            phones = phones.replace("ˌ", "").replace("ː", "").replace(
                 "ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
         if not self.use_word_boundaries:
             phones = phones.replace(" ", "")
