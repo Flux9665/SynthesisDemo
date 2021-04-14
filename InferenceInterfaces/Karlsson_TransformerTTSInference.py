@@ -43,7 +43,7 @@ class Transformer(torch.nn.Module, ABC):
                  bce_pos_weight=7.0,  # scaling the loss of the stop token prediction
                  loss_type="L1", use_guided_attn_loss=True, num_heads_applied_guided_attn=2, num_layers_applied_guided_attn=2,
                  modules_applied_guided_attn=("encoder-decoder",), guided_attn_loss_sigma=0.4,  # standard deviation from diagonal that is allowed
-                 guided_attn_loss_lambda=25.0):
+                 guided_attn_loss_lambda=25.0):  # forcing the attention to be diagonal
         super().__init__()
         self.idim = idim
         self.odim = odim
