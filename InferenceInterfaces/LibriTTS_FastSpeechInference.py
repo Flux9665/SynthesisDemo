@@ -80,7 +80,7 @@ class FastSpeech2(torch.nn.Module, ABC):
         self.feat_out = torch.nn.Linear(adim, odim * reduction_factor)
         self.postnet = PostNet(idim=idim, odim=odim, n_layers=postnet_layers, n_chans=postnet_chans, n_filts=postnet_filts, use_batch_norm=use_batch_norm,
                                dropout_rate=postnet_dropout_rate)
-        self.load_state_dict(torch.load(os.path.join("Models", "FastSpeech2_Thorsten", "best.pt"), map_location='cpu')["model"])
+        self.load_state_dict(torch.load(os.path.join("Models", "FastSpeech2_LibriTTS", "best.pt"), map_location='cpu')["model"])
 
     def _forward(self, xs, ilens, ys=None, olens=None, ds=None,
                  ps=None, es=None, spembs=None, is_inference=False, alpha=1.0):
@@ -178,7 +178,7 @@ class MelGANGenerator(torch.nn.Module):
         self.melgan = torch.nn.Sequential(*layers)
         if use_weight_norm:
             self.apply_weight_norm()
-        self.load_state_dict(torch.load(os.path.join("Models", "MelGAN_Thorsten", "best.pt"), map_location='cpu')["generator"])
+        self.load_state_dict(torch.load(os.path.join("Models", "MelGAN_LibriTTS", "best.pt"), map_location='cpu')["generator"])
 
     def remove_weight_norm(self):
         def _remove_weight_norm(m):
@@ -201,13 +201,14 @@ class MelGANGenerator(torch.nn.Module):
         return self.melgan(melspec)
 
 
-class Thorsten_FastSpeechInference(torch.nn.Module):
+class LibriTTS_FastSpeechInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
         self.device = device
-        self.text2phone = TextFrontend(language="de", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
-        self.phone2mel = FastSpeech2(idim=133, odim=80, spk_embed_dim=None, reduction_factor=1).to(torch.device(device))
+        self.speaker_embedding = torch.load(os.path.join("Models", "Use", speaker_embedding), map_location='cpu').to(torch.device(device))
+        self.text2phone = TextFrontend(language="en", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
+        self.phone2mel = FastSpeech2(idim=133, odim=80, spk_embed_dim=256, reduction_factor=1).to(torch.device(device))
         self.mel2wav = MelGANGenerator().to(torch.device(device))
         self.phone2mel.eval()
         self.mel2wav.eval()

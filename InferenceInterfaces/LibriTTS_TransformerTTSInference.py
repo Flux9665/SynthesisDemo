@@ -97,7 +97,7 @@ class Transformer(torch.nn.Module, ABC):
             self.attn_criterion = GuidedMultiHeadAttentionLoss(sigma=guided_attn_loss_sigma, alpha=guided_attn_loss_lambda)
         if self.use_guided_attn_loss:
             self.attn_criterion = GuidedMultiHeadAttentionLoss(sigma=guided_attn_loss_sigma, alpha=guided_attn_loss_lambda)
-        self.load_state_dict(torch.load(os.path.join("Models", "TransformerTTS_LJSpeech", "best.pt"), map_location='cpu')["model"])
+        self.load_state_dict(torch.load(os.path.join("Models", "TransformerTTS_LibriTTS", "best.pt"), map_location='cpu')["model"])
 
     def forward(self, text, spemb=None):
         self.eval()
@@ -188,7 +188,7 @@ class MelGANGenerator(torch.nn.Module):
         self.melgan = torch.nn.Sequential(*layers)
         if use_weight_norm:
             self.apply_weight_norm()
-        self.load_state_dict(torch.load(os.path.join("Models", "MelGAN_LJSpeech", "best.pt"), map_location='cpu')["generator"])
+        self.load_state_dict(torch.load(os.path.join("Models", "MelGAN_LibriTTS", "best.pt"), map_location='cpu')["generator"])
 
     def remove_weight_norm(self):
         def _remove_weight_norm(m):
@@ -211,13 +211,14 @@ class MelGANGenerator(torch.nn.Module):
         return self.melgan(melspec)
 
 
-class LJSpeech_TransformerTTSInference(torch.nn.Module):
+class LibriTTS_TransformerTTSInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
         self.device = device
+        self.speaker_embedding = torch.load(os.path.join("Models", "Use", speaker_embedding), map_location='cpu').to(torch.device(device))
         self.text2phone = TextFrontend(language="en", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
-        self.phone2mel = Transformer(idim=133, odim=80, spk_embed_dim=None, reduction_factor=1).to(torch.device(device))
+        self.phone2mel = Transformer(idim=133, odim=80, spk_embed_dim=256, reduction_factor=1).to(torch.device(device))
         self.mel2wav = MelGANGenerator().to(torch.device(device))
         self.phone2mel.eval()
         self.mel2wav.eval()
@@ -226,7 +227,7 @@ class LJSpeech_TransformerTTSInference(torch.nn.Module):
     def forward(self, text, view=False):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
-            mel = self.phone2mel(phones).transpose(0, 1)
+            mel = self.phone2mel(phones, self.speaker_embedding).transpose(0, 1)
             wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
         if view:
             import matplotlib.pyplot as plt
