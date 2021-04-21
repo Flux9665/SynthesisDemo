@@ -318,8 +318,7 @@ class Eva_TransformerTTSInference(torch.nn.Module):
             mel = self.phone2mel(phones, spemb=self.speaker_embedding).transpose(0, 1)
             wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
             if jupyter:
-                wave.cpu()
-                wave = torch.cat((wave, torch.zeros([8000])), 0).numpy()
+                wave = torch.cat((wave.cpu(), torch.zeros([8000])), 0).numpy()
         if view:
             import matplotlib.pyplot as plt
             import librosa.display as lbd
