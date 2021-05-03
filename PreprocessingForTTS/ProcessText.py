@@ -9,6 +9,7 @@ from cleantext import clean
 
 
 class TextFrontend:
+
     def __init__(self,
                  language,
                  use_panphon_vectors=False,
@@ -35,9 +36,7 @@ class TextFrontend:
         # see publication: https://www.aclweb.org/anthology/C16-1328/
         self.ipa_to_vector = defaultdict()
         if use_panphon_vectors:
-            self.default_vector = [132, 132, 132, 132, 132, 132, 132, 132, 132, 132,
-                                   132, 132, 132, 132, 132, 132, 132, 132, 132, 132,
-                                   132, 132, 132, 132, 132]
+            self.default_vector = [132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132, 132]
         else:
             self.default_vector = 132
         with open(path_to_panphon_table, encoding='utf8') as f:
@@ -60,14 +59,18 @@ class TextFrontend:
             self.expand_abbrevations = english_text_expansion
             if not silent:
                 print("Created an English Text-Frontend")
-
         elif language == "de":
             self.clean_lang = "de"
             self.g2p_lang = "de"
             self.expand_abbrevations = lambda x: x
             if not silent:
                 print("Created a German Text-Frontend")
-
+        elif language == "es":
+            self.clean_lang = "es"
+            self.g2p_lang = "es"
+            self.expand_abbrevations = lambda x: x
+            if not silent:
+                print("Created a Spanish Text-Frontend")
         else:
             print("Language not supported yet")
             sys.exit()
@@ -96,19 +99,20 @@ class TextFrontend:
                                       preserve_punctuation=True,
                                       strip=True,
                                       punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                      with_stress=self.use_stress).replace(";", ",").replace(":", ",").replace('"',
-                                                                                                               ",").replace(
-            "--", ",").replace("-", ",").replace("\n", " ").replace("\t", " ").replace("¡", "!").replace(
-            "¿", "?").replace(",", "~").replace("~~", "~")
+                                      with_stress=self.use_stress).replace(";", ",") \
+            .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
+            .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~")
+        phones = re.sub("~+", "~", phones)
 
         if not self.use_prosody:
             # retain ~ as heuristic pause marker, even though all other symbols are removed with this option.
             # also retain . ? and ! since they can be indicators for the stop token
-            phones = phones.replace("ˌ", "").replace("ː", "").replace(
-                "ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
+            phones = phones.replace("ˌ", "").replace("ː", "").replace("ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
 
         if not self.use_word_boundaries:
             phones = phones.replace(" ", "")
+        else:
+            phones = re.sub(r"\s+", " ", phones)
 
         if view:
             print("Phonemes: \n{}\n".format(phones))
@@ -144,13 +148,12 @@ class TextFrontend:
                                       preserve_punctuation=True,
                                       strip=True,
                                       punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                      with_stress=self.use_stress).replace(";", ",").replace(":", ",").replace('"',
-                                                                                                               ",").replace(
-            "--", ",").replace("-", ",").replace("\n", " ").replace("\t", " ").replace("¡", "!").replace(
-            "¿", "?").replace(",", "~")
+                                      with_stress=self.use_stress).replace(";", ",") \
+            .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
+            .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~")
+        phones = re.sub("~+", "~", phones)
         if not self.use_prosody:
-            phones = phones.replace("ˌ", "").replace("ː", "").replace(
-                "ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
+            phones = phones.replace("ˌ", "").replace("ː", "").replace("ˑ", "").replace("˘", "").replace("|", "").replace("‖", "")
         if not self.use_word_boundaries:
             phones = phones.replace(" ", "")
         return phones + "#"
@@ -162,25 +165,10 @@ def english_text_expansion(text):
     See https://github.com/keithito/tacotron/
     Careful: Only apply to english datasets. Different languages need different cleaners.
     """
-    _abbreviations = [(re.compile('\\b%s\\.' % x[0], re.IGNORECASE), x[1]) for x in [
-        ('Mrs.', 'misess'),
-        ('Mr.', 'mister'),
-        ('Dr.', 'doctor'),
-        ('St.', 'saint'),
-        ('Co.', 'company'),
-        ('Jr.', 'junior'),
-        ('Maj.', 'major'),
-        ('Gen.', 'general'),
-        ('Drs.', 'doctors'),
-        ('Rev.', 'reverend'),
-        ('Lt.', 'lieutenant'),
-        ('Hon.', 'honorable'),
-        ('Sgt.', 'sergeant'),
-        ('Capt.', 'captain'),
-        ('Esq.', 'esquire'),
-        ('Ltd.', 'limited'),
-        ('Col.', 'colonel'),
-        ('Ft.', 'fort')]]
+    _abbreviations = [(re.compile('\\b%s\\.' % x[0], re.IGNORECASE), x[1]) for x in
+                      [('Mrs.', 'misess'), ('Mr.', 'mister'), ('Dr.', 'doctor'), ('St.', 'saint'), ('Co.', 'company'), ('Jr.', 'junior'), ('Maj.', 'major'),
+                       ('Gen.', 'general'), ('Drs.', 'doctors'), ('Rev.', 'reverend'), ('Lt.', 'lieutenant'), ('Hon.', 'honorable'), ('Sgt.', 'sergeant'),
+                       ('Capt.', 'captain'), ('Esq.', 'esquire'), ('Ltd.', 'limited'), ('Col.', 'colonel'), ('Ft.', 'fort')]]
     for regex, replacement in _abbreviations:
         text = re.sub(regex, replacement, text)
     return text
@@ -188,17 +176,16 @@ def english_text_expansion(text):
 
 if __name__ == '__main__':
     # test an English utterance
-    tfr_en = TextFrontend(language="en",
-                          use_panphon_vectors=False,
-                          use_word_boundaries=False,
-                          use_explicit_eos=False,
+    tfr_en = TextFrontend(language="en", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False,
                           path_to_panphon_table="ipa_vector_lookup.csv")
     print(tfr_en.string_to_tensor("Hello world, this is a test!", view=True))
 
     # test a German utterance
-    tfr_de = TextFrontend(language="de",
-                          use_panphon_vectors=False,
-                          use_word_boundaries=False,
-                          use_explicit_eos=False,
+    tfr_de = TextFrontend(language="de", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False,
                           path_to_panphon_table="ipa_vector_lookup.csv")
     print(tfr_de.string_to_tensor("Hallo Welt, dies ist ein test!", view=True))
+
+    # test a Spanish utterance
+    tfr_de = TextFrontend(language="es", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False,
+                          path_to_panphon_table="ipa_vector_lookup.csv")
+    print(tfr_de.string_to_tensor("¿Dónde está la biblioteca?", view=True))
