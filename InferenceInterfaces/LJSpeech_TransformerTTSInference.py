@@ -100,14 +100,14 @@ class Transformer(torch.nn.Module, ABC):
             self.attn_criterion = GuidedMultiHeadAttentionLoss(sigma=guided_attn_loss_sigma, alpha=guided_attn_loss_lambda)
         self.load_state_dict(torch.load(os.path.join("Models", "TransformerTTS_LJSpeech", "best.pt"), map_location='cpu')["model"])
 
-    def forward(self, text, spemb=None):
+    def forward(self, text, speaker_embedding=None):
         self.eval()
         x = text
         xs = x.unsqueeze(0)
         hs, _ = self.encoder(xs, None)
         if self.spk_embed_dim is not None:
-            spembs = spemb.unsqueeze(0)
-            hs = self._integrate_with_spk_embed(hs, spembs)
+            speaker_embeddings = speaker_embedding.unsqueeze(0)
+            hs = self._integrate_with_spk_embed(hs, speaker_embeddings)
         maxlen = int(hs.size(1) * 10.0 / self.reduction_factor)
         minlen = int(hs.size(1) * 0.0 / self.reduction_factor)
         idx = 0
@@ -152,9 +152,9 @@ class Transformer(torch.nn.Module, ABC):
         s_masks = subsequent_mask(y_masks.size(-1), device=y_masks.device).unsqueeze(0)
         return y_masks.unsqueeze(-2) & s_masks
 
-    def _integrate_with_spk_embed(self, hs, spembs):
-        spembs = F.normalize(spembs).unsqueeze(1).expand(-1, hs.size(1), -1)
-        hs = self.projection(torch.cat([hs, spembs], dim=-1))
+    def _integrate_with_spk_embed(self, hs, speaker_embeddings):
+        speaker_embeddings = F.normalize(speaker_embeddings).unsqueeze(1).expand(-1, hs.size(1), -1)
+        hs = self.projection(torch.cat([hs, speaker_embeddings], dim=-1))
         return hs
 
 
@@ -303,6 +303,7 @@ class LJSpeech_TransformerTTSInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
+        self.speaker_embedding = speaker_embedding
         self.device = device
         self.text2phone = TextFrontend(language="en", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
         self.phone2mel = Transformer(idim=133, odim=80, spk_embed_dim=None, reduction_factor=1).to(torch.device(device))
@@ -311,11 +312,13 @@ class LJSpeech_TransformerTTSInference(torch.nn.Module):
         self.mel2wav.eval()
         self.to(torch.device(device))
 
-    def forward(self, text, view=False):
+    def forward(self, text, view=False, jupyter=True):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
-            mel = self.phone2mel(phones).transpose(0, 1)
+            mel = self.phone2mel(phones, speaker_embedding=self.speaker_embedding).transpose(0, 1)
             wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
+            if jupyter:
+                wave = torch.cat((wave.cpu(), torch.zeros([8000])), 0)
         if view:
             import matplotlib.pyplot as plt
             import librosa.display as lbd
@@ -328,37 +331,4 @@ class LJSpeech_TransformerTTSInference(torch.nn.Module):
             plt.subplots_adjust(left=0.05, bottom=0.1, right=0.95, top=.9, wspace=0.0, hspace=0.0)
             plt.show()
 
-        return wave
-
-    def read_to_file(self, text_list, file_location, silent=False):
-        """
-        :param silent: Whether to be verbose about the process
-        :param text_list: A list of strings to be read
-        :param file_location: The path and name of the file it should be saved to
-        """
-        wav = None
-        silence = torch.zeros([8000])
-        for text in text_list:
-            if text.strip() != "":
-                if not silent:
-                    print("Now synthesizing: {}".format(text))
-                if wav is None:
-                    wav = self(text).cpu()
-                else:
-                    wav = torch.cat((wav, silence), 0)
-                    wav = torch.cat((wav, self(text).cpu()), 0)
-        soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=16000)
-
-    def read_aloud(self, text, view=False, blocking=False):
-        if text.strip() == "":
-            return
-
-        wav = self(text, view).cpu()
-
-        if not blocking:
-            sounddevice.play(wav.numpy(), samplerate=16000)
-
-        else:
-            silence = torch.zeros([12000])
-            sounddevice.play(torch.cat((wav, silence), 0).numpy(), samplerate=16000)
-            sounddevice.wait()
+        return wave.numpy()

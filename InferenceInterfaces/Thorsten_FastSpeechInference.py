@@ -83,11 +83,11 @@ class FastSpeech2(torch.nn.Module, ABC):
         self.load_state_dict(torch.load(os.path.join("Models", "FastSpeech2_Thorsten", "best.pt"), map_location='cpu')["model"])
 
     def _forward(self, xs, ilens, ys=None, olens=None, ds=None,
-                 ps=None, es=None, spembs=None, is_inference=False, alpha=1.0):
+                 ps=None, es=None, speaker_embeddings=None, is_inference=False, alpha=1.0):
         x_masks = self._source_mask(ilens)
         hs, _ = self.encoder(xs, x_masks)
         if self.spk_embed_dim is not None:
-            hs = self._integrate_with_spk_embed(hs, spembs)
+            hs = self._integrate_with_spk_embed(hs, speaker_embeddings)
         d_masks = make_pad_mask(ilens).to(xs.device)
         if self.stop_gradient_from_pitch_predictor:
             p_outs = self.pitch_predictor(hs.detach(), d_masks.unsqueeze(-1))
@@ -122,24 +122,19 @@ class FastSpeech2(torch.nn.Module, ABC):
         after_outs = before_outs + self.postnet(before_outs.transpose(1, 2)).transpose(1, 2)
         return before_outs, after_outs, d_outs, p_outs, e_outs
 
-    def forward(self, text, speech=None, spembs=None, durations=None, pitch=None,
-                energy=None, alpha=1.0):
+    def forward(self, text, speaker_embedding=None, alpha=1.0):
         self.eval()
-        x, y = text, speech
-        spemb, d, p, e = spembs, durations, pitch, energy
+        x = text
         ilens = torch.tensor([x.shape[0]], dtype=torch.long, device=x.device)
-        xs, ys = x.unsqueeze(0), None
-        if y is not None:
-            ys = y.unsqueeze(0)
-        if spemb is not None:
-            spembs = spemb.unsqueeze(0)
-        _, outs, *_ = self._forward(xs, ilens, ys, spembs=spembs, is_inference=True, alpha=alpha)
-        self.train()
+        xs = x.unsqueeze(0)
+        if speaker_embedding is not None:
+            speaker_embedding = speaker_embedding.unsqueeze(0)
+        _, outs, *_ = self._forward(xs, ilens, None, speaker_embeddings=speaker_embedding, is_inference=True, alpha=alpha)
         return outs[0]
 
-    def _integrate_with_spk_embed(self, hs, spembs):
-        spembs = F.normalize(spembs).unsqueeze(1).expand(-1, hs.size(1), -1)
-        hs = self.projection(torch.cat([hs, spembs], dim=-1))
+    def _integrate_with_spk_embed(self, hs, speaker_embeddings):
+        speaker_embeddings = F.normalize(speaker_embeddings).unsqueeze(1).expand(-1, hs.size(1), -1)
+        hs = self.projection(torch.cat([hs, speaker_embeddings], dim=-1))
         return hs
 
     def _source_mask(self, ilens):
@@ -205,6 +200,7 @@ class Thorsten_FastSpeechInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
+        self.speaker_embedding = speaker_embedding
         self.device = device
         self.text2phone = TextFrontend(language="de", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
         self.phone2mel = FastSpeech2(idim=133, odim=80, spk_embed_dim=None, reduction_factor=1).to(torch.device(device))
@@ -213,11 +209,13 @@ class Thorsten_FastSpeechInference(torch.nn.Module):
         self.mel2wav.eval()
         self.to(torch.device(device))
 
-    def forward(self, text, view=False):
+    def forward(self, text, view=False, jupyter=True):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
-            mel = self.phone2mel(phones).transpose(0, 1)
+            mel = self.phone2mel(phones, speaker_embedding=self.speaker_embedding).transpose(0, 1)
             wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
+            if jupyter:
+                wave = torch.cat((wave.cpu(), torch.zeros([8000])), 0)
         if view:
             import matplotlib.pyplot as plt
             import librosa.display as lbd
@@ -229,38 +227,4 @@ class Thorsten_FastSpeechInference(torch.nn.Module):
             ax[1].yaxis.set_visible(False)
             plt.subplots_adjust(left=0.05, bottom=0.1, right=0.95, top=.9, wspace=0.0, hspace=0.0)
             plt.show()
-
-        return wave
-
-    def read_to_file(self, text_list, file_location, silent=False):
-        """
-        :param silent: Whether to be verbose about the process
-        :param text_list: A list of strings to be read
-        :param file_location: The path and name of the file it should be saved to
-        """
-        wav = None
-        silence = torch.zeros([8000])
-        for text in text_list:
-            if text.strip() != "":
-                if not silent:
-                    print("Now synthesizing: {}".format(text))
-                if wav is None:
-                    wav = self(text).cpu()
-                else:
-                    wav = torch.cat((wav, silence), 0)
-                    wav = torch.cat((wav, self(text).cpu()), 0)
-        soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=16000)
-
-    def read_aloud(self, text, view=False, blocking=False):
-        if text.strip() == "":
-            return
-
-        wav = self(text, view).cpu()
-
-        if not blocking:
-            sounddevice.play(wav.numpy(), samplerate=16000)
-
-        else:
-            silence = torch.zeros([12000])
-            sounddevice.play(torch.cat((wav, silence), 0).numpy(), samplerate=16000)
-            sounddevice.wait()
+        return wave.numpy()
