@@ -200,6 +200,8 @@ class SpanishBig_FastSpeechInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
+        self.speaker_embedding=None
+
         self.device = device
         self.text2phone = TextFrontend(language="es", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
         self.phone2mel = FastSpeech2(idim=133, odim=80, spk_embed_dim=None, reduction_factor=1).to(torch.device(device))
@@ -208,11 +210,13 @@ class SpanishBig_FastSpeechInference(torch.nn.Module):
         self.mel2wav.eval()
         self.to(torch.device(device))
 
-    def forward(self, text, view=False):
+    def forward(self, text, view=False, jupyter=True):
         with torch.no_grad():
             phones = self.text2phone.string_to_tensor(text).squeeze(0).long().to(torch.device(self.device))
-            mel = self.phone2mel(phones).transpose(0, 1)
+            mel = self.phone2mel(phones, speaker_embedding=self.speaker_embedding).transpose(0, 1)
             wave = self.mel2wav(mel.unsqueeze(0)).squeeze(0).squeeze(0)
+            if jupyter:
+                wave = torch.cat((wave.cpu(), torch.zeros([8000])), 0)
         if view:
             import matplotlib.pyplot as plt
             import librosa.display as lbd
@@ -225,37 +229,4 @@ class SpanishBig_FastSpeechInference(torch.nn.Module):
             plt.subplots_adjust(left=0.05, bottom=0.1, right=0.95, top=.9, wspace=0.0, hspace=0.0)
             plt.show()
 
-        return wave
-
-    def read_to_file(self, text_list, file_location, silent=False):
-        """
-        :param silent: Whether to be verbose about the process
-        :param text_list: A list of strings to be read
-        :param file_location: The path and name of the file it should be saved to
-        """
-        wav = None
-        silence = torch.zeros([8000])
-        for text in text_list:
-            if text.strip() != "":
-                if not silent:
-                    print("Now synthesizing: {}".format(text))
-                if wav is None:
-                    wav = self(text).cpu()
-                else:
-                    wav = torch.cat((wav, silence), 0)
-                    wav = torch.cat((wav, self(text).cpu()), 0)
-        soundfile.write(file=file_location, data=wav.cpu().numpy(), samplerate=16000)
-
-    def read_aloud(self, text, view=False, blocking=False):
-        if text.strip() == "":
-            return
-
-        wav = self(text, view).cpu()
-
-        if not blocking:
-            sounddevice.play(wav.numpy(), samplerate=16000)
-
-        else:
-            silence = torch.zeros([12000])
-            sounddevice.play(torch.cat((wav, silence), 0).numpy(), samplerate=16000)
-            sounddevice.wait()
+        return wave.numpy()
