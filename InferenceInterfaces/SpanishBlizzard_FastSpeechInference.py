@@ -2,8 +2,6 @@ import os
 from abc import ABC
 
 import numpy as np
-import sounddevice
-import soundfile
 import torch
 import torch.nn.functional as F
 
@@ -200,7 +198,7 @@ class SpanishBlizzard_FastSpeechInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
-        self.speaker_embedding=None
+        self.speaker_embedding = None
 
         self.device = device
         self.text2phone = TextFrontend(language="es", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)

@@ -2,8 +2,6 @@ import os
 from abc import ABC
 
 import numpy as np
-import sounddevice
-import soundfile
 import torch
 import torch.nn.functional as F
 
@@ -157,6 +155,7 @@ class Transformer(torch.nn.Module, ABC):
         hs = self.projection(torch.cat([hs, speaker_embeddings], dim=-1))
         return hs
 
+
 class TransformerLoss(torch.nn.Module):
 
     def __init__(self, use_masking=True, use_weighted_masking=False, bce_pos_weight=20.0):
@@ -242,6 +241,8 @@ class TransformerLoss(torch.nn.Module):
         key = prefix + "bce_criterion.pos_weight"
         if key not in state_dict:
             state_dict[key] = self.bce_criterion.pos_weight
+
+
 class MelGANGenerator(torch.nn.Module):
 
     def __init__(self, in_channels=80, out_channels=1, kernel_size=7, channels=512, bias=True,
@@ -300,7 +301,7 @@ class SpanishBlizzard_TransformerTTSInference(torch.nn.Module):
 
     def __init__(self, device="cpu", speaker_embedding=None):
         super().__init__()
-        self.speaker_embedding=None
+        self.speaker_embedding = None
 
         self.device = device
         self.text2phone = TextFrontend(language="es", use_panphon_vectors=False, use_word_boundaries=False, use_explicit_eos=False)
