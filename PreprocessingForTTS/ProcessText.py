@@ -22,7 +22,7 @@ class TextFrontend:
                  # lot, even though one might think enriching the input
                  # with such information would help such systems.
                  use_lexical_stress=False,
-                 use_codeswitching=True,
+                 use_codeswitching=False,
                  path_to_panphon_table="PreprocessingForTTS/ipa_vector_lookup.csv",
                  silent=True):
         """
