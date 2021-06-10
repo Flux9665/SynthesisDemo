@@ -6,7 +6,6 @@ import numpy
 import phonemizer
 import torch
 from cleantext import clean
-from codeswitch.codeswitch import LanguageIdentification
 
 
 class TextFrontend:
@@ -22,7 +21,6 @@ class TextFrontend:
                  # lot, even though one might think enriching the input
                  # with such information would help such systems.
                  use_lexical_stress=False,
-                 use_codeswitching=False,
                  path_to_panphon_table="PreprocessingForTTS/ipa_vector_lookup.csv",
                  silent=True):
         """
@@ -33,7 +31,6 @@ class TextFrontend:
         self.use_explicit_eos = use_explicit_eos
         self.use_prosody = use_prosody
         self.use_stress = use_lexical_stress
-        self.use_codeswitching = use_codeswitching
 
         # list taken and modified from https://github.com/dmort27/panphon
         # see publication: https://www.aclweb.org/anthology/C16-1328/
@@ -94,62 +91,19 @@ class TextFrontend:
         # phonemizer:
         utt = utt.replace("_SIL_", "~")
 
-        # code switching
-        if self.use_codeswitching:
-            lid = LanguageIdentification('spa-eng')
-            cs_dicts = lid.identify(utt)
-
-            # convert wordpiece tokens back to words
-            id_to_del = []
-            for i in range(len(cs_dicts)):
-                word = cs_dicts[i]['word']
-                if word.startswith('##'):
-                    id_to_del.append(i)
-                    cs_dicts[i - 1]['word'] += word.replace('##', '')
-                else:
-                    continue
-
-            for idx in sorted(id_to_del, reverse=True):
-                del cs_dicts[idx]
-            print('results after deltetions: ')
-
-            phones = ""
-            for entry in cs_dicts:
-                word = entry['word']
-                cs_lang = entry['entity']
-                if cs_lang == 'spa':
-                    g2p_lang = 'es'
-                elif cs_lang == 'en':
-                    g2p_lang = 'en-us'
-                else:
-                    g2p_lang = 'en-us'  # try en as default, since most Named Entities in dev set should be pronounced in English
-
-                # phonemize word by word
-                phones += phonemizer.phonemize(word,
-                                               language_switch='remove-flags',
-                                               backend="espeak",
-                                               language=g2p_lang,
-                                               preserve_punctuation=True,
-                                               strip=True,
-                                               punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                               with_stress=self.use_stress).replace(";", ",") \
-                    .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
-                    .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~")
-            phones = re.sub("~+", "~", phones)
-
-        else:
-            # phonemize
-            phones = phonemizer.phonemize(utt,
-                                          language_switch='remove-flags',
-                                          backend="espeak",
-                                          language=self.g2p_lang,
-                                          preserve_punctuation=True,
-                                          strip=True,
-                                          punctuation_marks=';:,.!?¡¿—…"«»“”~',
-                                          with_stress=self.use_stress).replace(";", ",") \
-                .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
-                .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~")
-            phones = re.sub("~+", "~", phones)
+        
+        # phonemize
+        phones = phonemizer.phonemize(utt,
+                                      language_switch='remove-flags',
+                                      backend="espeak",
+                                      language=self.g2p_lang,
+                                      preserve_punctuation=True,
+                                      strip=True,
+                                      punctuation_marks=';:,.!?¡¿—…"«»“”~',
+                                      with_stress=self.use_stress).replace(";", ",") \
+            .replace(":", ",").replace('"', ",").replace("-", ",").replace("-", ",").replace("\n", " ") \
+            .replace("\t", " ").replace("¡", "").replace("¿", "").replace(",", "~")
+        phones = re.sub("~+", "~", phones)
 
         if not self.use_prosody:
             # retain ~ as heuristic pause marker, even though all other symbols are removed with this option.
